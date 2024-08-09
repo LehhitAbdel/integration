@@ -13,6 +13,11 @@
  */
 
 namespace Box\Mod\Client\Api;
+require_once __DIR__ . '/../../../src/vendor/autoload.php';
+
+use PhpAmqpLib\Message\AMQPMessage;
+use PhpAmqpLib\Connection\AMQPStreamConnection;
+
 
 class Admin extends \Api_Abstract
 {
@@ -140,23 +145,58 @@ class Admin extends \Api_Abstract
             'first_name' => 'First name is required',
         ];
         $this->di['validator']->checkRequiredParamsForArray($required, $data);
-
+    
         $validator = $this->di['validator'];
         $data['email'] = $this->di['tools']->validateAndSanitizeEmail($data['email']);
-
+    
         $service = $this->getService();
         if ($service->emailAlreadyRegistered($data['email'])) {
             throw new \FOSSBilling\InformationException('This email address is already registered.');
         }
-
+    
         $validator->isPasswordStrong($data['password']);
-
+    
         $this->di['events_manager']->fire(['event' => 'onBeforeAdminClientCreate', 'params' => $data]);
         $id = $service->adminCreateClient($data);
         $this->di['events_manager']->fire(['event' => 'onAfterAdminClientCreate', 'params' => $data]);
-
+    
+        // Prepare the data for RabbitMQ
+        $rabbitMqData = [
+            'client_id' => $id,
+            'email' => $data['email'],
+            'first_name' => $data['first_name'],
+            // Add any additional fields you need to pass to RabbitMQ
+        ];
+    
+        // Publish to RabbitMQ
+        $this->sendToRabbitMQ($rabbitMqData);
+    
         return $id;
     }
+    
+    /**
+     * Publishes data to RabbitMQ queue.
+     *
+     * @param array $data The data to be published.
+     */
+      /**
+   * Send data to RabbitMQ
+   *
+   * @param array $data - Client data
+   */
+    private function sendToRabbitMQ($data)
+    {
+        $connection = new AMQPStreamConnection('rabbitmq', 5672, 'user', 'password');
+        $channel = $connection->channel();
+        $channel->queue_declare('foss_client_queue', false, false, false, false);
+    
+        $msg = new AMQPMessage(json_encode($data));
+        $channel->basic_publish($msg, '', 'foss_client_queue');
+    
+        $channel->close();
+        $connection->close();
+    }
+    
 
     /**
      * Deletes client from system.

@@ -14,8 +14,12 @@ WORKDIR /var/www/html
 # Install PHP extensions
 RUN docker-php-ext-install bcmath sockets
 
+COPY ./composer.json .
+COPY ./Admin.php ./modules/Client/Api/
+
 RUN composer require php-amqplib/php-amqplib
 RUN composer install
+
  
 #correct permissions
 RUN chown -R www-data:www-data /var/www/html
