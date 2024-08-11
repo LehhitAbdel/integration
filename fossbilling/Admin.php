@@ -7,18 +7,18 @@
  * @copyright FOSSBilling (https://www.fossbilling.org)
  * @license http://www.apache.org/licenses/LICENSE-2.0 Apache-2.0
  */
-
+ 
 /**
  * Client management.
  */
-
+ 
 namespace Box\Mod\Client\Api;
 require_once __DIR__ . '/../../../src/vendor/autoload.php';
-
+ 
 use PhpAmqpLib\Message\AMQPMessage;
 use PhpAmqpLib\Connection\AMQPStreamConnection;
-
-
+ 
+ 
 class Admin extends \Api_Abstract
 {
     /**
@@ -33,15 +33,15 @@ class Admin extends \Api_Abstract
         $per_page = $data['per_page'] ?? $this->di['pager']->getPer_page();
         [$sql, $params] = $this->getService()->getSearchQuery($data);
         $pager = $this->di['pager']->getSimpleResultSet($sql, $params, $per_page);
-
+ 
         foreach ($pager['list'] as $key => $clientArr) {
             $client = $this->di['db']->getExistingModelById('Client', $clientArr['id'], 'Client not found');
             $pager['list'][$key] = $this->getService()->toApiArray($client, true, $this->getIdentity());
         }
-
+ 
         return $pager;
     }
-
+ 
     /**
      * Get a list of clients.
      *
@@ -52,10 +52,10 @@ class Admin extends \Api_Abstract
     public function get_pairs($data)
     {
         $service = $this->di['mod_service']('client');
-
+ 
         return $service->getPairs($data);
     }
-
+ 
     /**
      * Get client by id or email. Email is also unique in database.
      *
@@ -67,10 +67,10 @@ class Admin extends \Api_Abstract
     {
         $service = $this->getService();
         $client = $service->get($data);
-
+ 
         return $service->toApiArray($client, true, $this->getIdentity());
     }
-
+ 
     /**
      * Login to clients area with client id.
      *
@@ -82,19 +82,19 @@ class Admin extends \Api_Abstract
             'id' => 'ID required',
         ];
         $this->di['validator']->checkRequiredParamsForArray($required, $data);
-
+ 
         $client = $this->di['db']->getExistingModelById('Client', $data['id'], 'Client not found');
-
+ 
         $service = $this->di['mod_service']('client');
         $result = $service->toSessionArray($client);
-
+ 
         $session = $this->di['session'];
         $session->set('client_id', $client->id);
         $this->di['logger']->info('Logged in as client #%s', $client->id);
-
+ 
         return $result;
     }
-
+ 
     /**
      * Creates new client.
      *
@@ -145,35 +145,35 @@ class Admin extends \Api_Abstract
             'first_name' => 'First name is required',
         ];
         $this->di['validator']->checkRequiredParamsForArray($required, $data);
-    
+   
         $validator = $this->di['validator'];
         $data['email'] = $this->di['tools']->validateAndSanitizeEmail($data['email']);
-    
+   
         $service = $this->getService();
         if ($service->emailAlreadyRegistered($data['email'])) {
             throw new \FOSSBilling\InformationException('This email address is already registered.');
         }
-    
+   
         $validator->isPasswordStrong($data['password']);
-    
+   
         $this->di['events_manager']->fire(['event' => 'onBeforeAdminClientCreate', 'params' => $data]);
         $id = $service->adminCreateClient($data);
         $this->di['events_manager']->fire(['event' => 'onAfterAdminClientCreate', 'params' => $data]);
-    
+   
         // Prepare the data for RabbitMQ
         $rabbitMqData = [
             'client_id' => $id,
             'email' => $data['email'],
             'first_name' => $data['first_name'],
-            // Add any additional fields you need to pass to RabbitMQ
+            // Add any additional fields if needed
         ];
-    
+   
         // Publish to RabbitMQ
         $this->sendToRabbitMQ($rabbitMqData);
-    
+   
         return $id;
     }
-    
+   
     /**
      * Publishes data to RabbitMQ queue.
      *
@@ -188,41 +188,58 @@ class Admin extends \Api_Abstract
     {
         $connection = new AMQPStreamConnection('rabbitmq', 5672, 'user', 'password');
         $channel = $connection->channel();
-        $channel->queue_declare('foss_client_queue', false, false, false, false);
-    
+        $channel->queue_declare('fossbilling_client_queue', false, false, false, false);
+   
         $msg = new AMQPMessage(json_encode($data));
-        $channel->basic_publish($msg, '', 'foss_client_queue');
-    
+        $channel->basic_publish($msg, '', 'fossbilling_client_queue');
+   
         $channel->close();
         $connection->close();
     }
-    
-
+   
+ 
     /**
-     * Deletes client from system.
+     * Deleting client from system.
      *
      * @return bool
      */
     public function delete($data)
-    {
-        $required = [
-            'id' => 'Client id is missing',
-        ];
-        $this->di['validator']->checkRequiredParamsForArray($required, $data);
+{
+    $required = [
+        'id' => 'Client id is missing',
+    ];
+    $this->di['validator']->checkRequiredParamsForArray($required, $data);
 
-        $model = $this->di['db']->getExistingModelById('Client', $data['id'], 'Client not found');
+    $model = $this->di['db']->getExistingModelById('Client', $data['id'], 'Client not found');
 
-        $this->di['events_manager']->fire(['event' => 'onBeforeAdminClientDelete', 'params' => ['id' => $model->id]]);
+    $this->di['events_manager']->fire(['event' => 'onBeforeAdminClientDelete', 'params' => ['id' => $model->id]]);
 
-        $id = $model->id;
-        $this->getService()->remove($model);
-        $this->di['events_manager']->fire(['event' => 'onAfterAdminClientDelete', 'params' => ['id' => $id]]);
+    $id = $model->id;
+    $this->getService()->remove($model);
+    $this->di['events_manager']->fire(['event' => 'onAfterAdminClientDelete', 'params' => ['id' => $id]]);
 
-        $this->di['logger']->info('Removed client #%s', $id);
+    $this->di['logger']->info('Removed client #%s', $id);
 
-        return true;
-    }
+    // Send delete message to RabbitMQ
+    $this->sendDeleteToRabbitMQ($id);
 
+    return true;
+}
+
+private function sendDeleteToRabbitMQ($clientId)
+{
+    $connection = new AMQPStreamConnection('rabbitmq', 5672, 'user', 'password');
+    $channel = $connection->channel();
+    $channel->queue_declare('fossbilling_delete_queue', false, false, false, false);
+
+    $msg = new AMQPMessage(json_encode(['action' => 'delete', 'clientId' => $clientId]));
+    $channel->basic_publish($msg, '', 'fossbilling_delete_queue');
+
+    $channel->close();
+    $connection->close();
+}
+
+ 
     /**
      * Update client profile.
      *
@@ -264,87 +281,148 @@ class Admin extends \Api_Abstract
      * @return bool
      */
     public function update($data = [])
-    {
-        $required = ['id' => 'Id required'];
-        $this->di['validator']->checkRequiredParamsForArray($required, $data);
+{
+    $required = ['id' => 'Id required'];
+    $this->di['validator']->checkRequiredParamsForArray($required, $data);
 
-        $client = $this->di['db']->getExistingModelById('Client', $data['id'], 'Client not found');
+    $client = $this->di['db']->getExistingModelById('Client', $data['id'], 'Client not found');
 
-        $service = $this->di['mod_service']('client');
+    $service = $this->di['mod_service']('client');
 
-        if (!is_null($data['email'] ?? null)) {
-            $email = $data['email'];
-            $email = $this->di['tools']->validateAndSanitizeEmail($email);
-            if ($service->emailAlreadyRegistered($email, $client)) {
-                throw new \FOSSBilling\InformationException('This email address is already registered.');
-            }
+    if (!is_null($data['email'] ?? null)) {
+        $email = $data['email'];
+        $email = $this->di['tools']->validateAndSanitizeEmail($email);
+        if ($service->emailAlreadyRegistered($email, $client)) {
+            throw new \FOSSBilling\InformationException('This email address is already registered.');
         }
-
-        if (!empty($data['birthday'])) {
-            $this->di['validator']->isBirthdayValid($data['birthday']);
-        }
-
-        if (($data['currency'] ?? null) && $service->canChangeCurrency($client, $data['currency'] ?? null)) {
-            $client->currency = $data['currency'] ?? $client->currency;
-        }
-
-        $this->di['events_manager']->fire(['event' => 'onBeforeAdminClientUpdate', 'params' => $data]);
-
-        $phoneCC = $data['phone_cc'] ?? $client->phone_cc;
-        if (!empty($phoneCC)) {
-            $client->phone_cc = intval($phoneCC);
-        }
-
-        $client->email = (!empty($data['email']) ? $data['email'] : $client->email);
-        $client->first_name = (!empty($data['first_name']) ? $data['first_name'] : $client->first_name);
-        $client->last_name = (!empty($data['last_name']) ? $data['last_name'] : $client->last_name);
-        $client->aid = (!empty($data['aid']) ? $data['aid'] : $client->aid);
-        $client->gender = (!empty($data['gender']) ? $data['gender'] : $client->gender);
-        $client->birthday = (!empty($data['birthday']) ? $data['birthday'] : $client->birthday);
-        $client->company = (!empty($data['company']) ? $data['company'] : $client->company);
-        $client->company_vat = (!empty($data['company_vat']) ? $data['company_vat'] : $client->company_vat);
-        $client->address_1 = (!empty($data['address_1']) ? $data['address_1'] : $client->address_1);
-        $client->address_2 = (!empty($data['address_2']) ? $data['address_2'] : $client->address_2);
-        $client->phone = (!empty($data['phone']) ? $data['phone'] : $client->phone);
-        $client->document_type = (!empty($data['document_type']) ? $data['document_type'] : $client->document_type);
-        $client->document_nr = (!empty($data['document_nr']) ? $data['document_nr'] : $client->document_nr);
-        $client->notes = (!empty($data['notes']) ? $data['notes'] : $client->notes);
-        $client->country = (!empty($data['country']) ? $data['country'] : $client->country);
-        $client->postcode = (!empty($data['postcode']) ? $data['postcode'] : $client->postcode);
-        $client->state = (!empty($data['state']) ? $data['state'] : $client->state);
-        $client->city = (!empty($data['city']) ? $data['city'] : $client->city);
-
-        $client->status = (!empty($data['status']) ? $data['status'] : $client->status);
-        $client->email_approved = (!empty($data['email_approved']) ? $data['email_approved'] : $client->email_approved);
-        $client->tax_exempt = (!empty($data['tax_exempt']) ? $data['tax_exempt'] : $client->tax_exempt);
-        $client->created_at = (!empty($data['created_at']) ? $data['created_at'] : $client->created_at);
-
-        $client->custom_1 = (!empty($data['custom_1']) ? $data['custom_1'] : $client->custom_1);
-        $client->custom_2 = (!empty($data['custom_2']) ? $data['custom_2'] : $client->custom_2);
-        $client->custom_3 = (!empty($data['custom_3']) ? $data['custom_3'] : $client->custom_3);
-        $client->custom_4 = (!empty($data['custom_4']) ? $data['custom_4'] : $client->custom_4);
-        $client->custom_5 = (!empty($data['custom_5']) ? $data['custom_5'] : $client->custom_5);
-        $client->custom_6 = (!empty($data['custom_6']) ? $data['custom_6'] : $client->custom_6);
-        $client->custom_7 = (!empty($data['custom_7']) ? $data['custom_7'] : $client->custom_7);
-        $client->custom_8 = (!empty($data['custom_8']) ? $data['custom_8'] : $client->custom_8);
-        $client->custom_9 = (!empty($data['custom_9']) ? $data['custom_9'] : $client->custom_9);
-        $client->custom_10 = (!empty($data['custom_10']) ? $data['custom_10'] : $client->custom_10);
-
-        $client->client_group_id = (!empty($data['group_id']) ? $data['group_id'] : $client->client_group_id);
-        $client->company_number = (!empty($data['company_number']) ? $data['company_number'] : $client->company_number);
-        $client->type = (!empty($data['type']) ? $data['type'] : $client->type);
-        $client->lang = (!empty($data['lang']) ? $data['lang'] : $client->lang);
-
-        $client->updated_at = date('Y-m-d H:i:s');
-
-        $this->di['db']->store($client);
-        $this->di['events_manager']->fire(['event' => 'onAfterAdminClientUpdate', 'params' => ['id' => $client->id]]);
-
-        $this->di['logger']->info('Updated client #%s profile', $client->id);
-
-        return true;
     }
 
+    if (!empty($data['birthday'])) {
+        $this->di['validator']->isBirthdayValid($data['birthday']);
+    }
+
+    if (($data['currency'] ?? null) && $service->canChangeCurrency($client, $data['currency'] ?? null)) {
+        $client->currency = $data['currency'] ?? $client->currency;
+    }
+
+    $this->di['events_manager']->fire(['event' => 'onBeforeAdminClientUpdate', 'params' => $data]);
+
+    $phoneCC = $data['phone_cc'] ?? $client->phone_cc;
+    if (!empty($phoneCC)) {
+        $client->phone_cc = intval($phoneCC);
+    }
+
+    $client->email = (!empty($data['email']) ? $data['email'] : $client->email);
+    $client->first_name = (!empty($data['first_name']) ? $data['first_name'] : $client->first_name);
+    $client->last_name = (!empty($data['last_name']) ? $data['last_name'] : $client->last_name);
+    $client->aid = (!empty($data['aid']) ? $data['aid'] : $client->aid);
+    $client->gender = (!empty($data['gender']) ? $data['gender'] : $client->gender);
+    $client->birthday = (!empty($data['birthday']) ? $data['birthday'] : $client->birthday);
+    $client->company = (!empty($data['company']) ? $data['company'] : $client->company);
+    $client->company_vat = (!empty($data['company_vat']) ? $data['company_vat'] : $client->company_vat);
+    $client->address_1 = (!empty($data['address_1']) ? $data['address_1'] : $client->address_1);
+    $client->address_2 = (!empty($data['address_2']) ? $data['address_2'] : $client->address_2);
+    $client->phone = (!empty($data['phone']) ? $data['phone'] : $client->phone);
+    $client->document_type = (!empty($data['document_type']) ? $data['document_type'] : $client->document_type);
+    $client->document_nr = (!empty($data['document_nr']) ? $data['document_nr'] : $client->document_nr);
+    $client->notes = (!empty($data['notes']) ? $data['notes'] : $client->notes);
+    $client->country = (!empty($data['country']) ? $data['country'] : $client->country);
+    $client->postcode = (!empty($data['postcode']) ? $data['postcode'] : $client->postcode);
+    $client->state = (!empty($data['state']) ? $data['state'] : $client->state);
+    $client->city = (!empty($data['city']) ? $data['city'] : $client->city);
+
+    $client->status = (!empty($data['status']) ? $data['status'] : $client->status);
+    $client->email_approved = (!empty($data['email_approved']) ? $data['email_approved'] : $client->email_approved);
+    $client->tax_exempt = (!empty($data['tax_exempt']) ? $data['tax_exempt'] : $client->tax_exempt);
+    $client->created_at = (!empty($data['created_at']) ? $data['created_at'] : $client->created_at);
+
+    $client->custom_1 = (!empty($data['custom_1']) ? $data['custom_1'] : $client->custom_1);
+    $client->custom_2 = (!empty($data['custom_2']) ? $data['custom_2'] : $client->custom_2);
+    $client->custom_3 = (!empty($data['custom_3']) ? $data['custom_3'] : $client->custom_3);
+    $client->custom_4 = (!empty($data['custom_4']) ? $data['custom_4'] : $client->custom_4);
+    $client->custom_5 = (!empty($data['custom_5']) ? $data['custom_5'] : $client->custom_5);
+    $client->custom_6 = (!empty($data['custom_6']) ? $data['custom_6'] : $client->custom_6);
+    $client->custom_7 = (!empty($data['custom_7']) ? $data['custom_7'] : $client->custom_7);
+    $client->custom_8 = (!empty($data['custom_8']) ? $data['custom_8'] : $client->custom_8);
+    $client->custom_9 = (!empty($data['custom_9']) ? $data['custom_9'] : $client->custom_9);
+    $client->custom_10 = (!empty($data['custom_10']) ? $data['custom_10'] : $client->custom_10);
+
+    $client->client_group_id = (!empty($data['group_id']) ? $data['group_id'] : $client->client_group_id);
+    $client->company_number = (!empty($data['company_number']) ? $data['company_number'] : $client->company_number);
+    $client->type = (!empty($data['type']) ? $data['type'] : $client->type);
+    $client->lang = (!empty($data['lang']) ? $data['lang'] : $client->lang);
+
+    $client->updated_at = date('Y-m-d H:i:s');
+
+    $this->di['db']->store($client);
+    $this->di['events_manager']->fire(['event' => 'onAfterAdminClientUpdate', 'params' => ['id' => $client->id]]);
+
+    $this->di['logger']->info('Updated client #%s profile', $client->id);
+
+    // Send update message RabbitMQ
+    $this->sendUpdateToRabbitMQ($client);
+
+    return true;
+}
+
+private function sendUpdateToRabbitMQ($client)
+{
+    $connection = new AMQPStreamConnection('rabbitmq', 5672, 'user', 'password');
+    $channel = $connection->channel();
+    $channel->queue_declare('fossbilling_update_queue', false, false, false, false);
+
+    $data = [
+        'action' => 'update',
+        'clientId' => $client->id,
+        'clientData' => [
+            'email' => $client->email,
+            'first_name' => $client->first_name,
+            'last_name' => $client->last_name,
+            'aid' => $client->aid,
+            'gender' => $client->gender,
+            'birthday' => $client->birthday,
+            'company' => $client->company,
+            'company_vat' => $client->company_vat,
+            'address_1' => $client->address_1,
+            'address_2' => $client->address_2,
+            'phone' => $client->phone,
+            'document_type' => $client->document_type,
+            'document_nr' => $client->document_nr,
+            'notes' => $client->notes,
+            'country' => $client->country,
+            'postcode' => $client->postcode,
+            'state' => $client->state,
+            'city' => $client->city,
+            'status' => $client->status,
+            'email_approved' => $client->email_approved,
+            'tax_exempt' => $client->tax_exempt,
+            'created_at' => $client->created_at,
+            'custom_1' => $client->custom_1,
+            'custom_2' => $client->custom_2,
+            'custom_3' => $client->custom_3,
+            'custom_4' => $client->custom_4,
+            'custom_5' => $client->custom_5,
+            'custom_6' => $client->custom_6,
+            'custom_7' => $client->custom_7,
+            'custom_8' => $client->custom_8,
+            'custom_9' => $client->custom_9,
+            'custom_10' => $client->custom_10,
+            'client_group_id' => $client->client_group_id,
+            'company_number' => $client->company_number,
+            'type' => $client->type,
+            'lang' => $client->lang,
+            'updated_at' => $client->updated_at,
+        ],
+    ];
+
+    $msg = new AMQPMessage(json_encode($data));
+    $channel->basic_publish($msg, '', 'fossbilling_update_queue');
+
+    $channel->close();
+    $connection->close();
+}
+
+ 
     /**
      * Change client password.
      *
@@ -358,31 +436,31 @@ class Admin extends \Api_Abstract
             'password_confirm' => 'Password confirmation required',
         ];
         $this->di['validator']->checkRequiredParamsForArray($required, $data);
-
+ 
         if ($data['password'] != $data['password_confirm']) {
             throw new \FOSSBilling\InformationException('Passwords do not match');
         }
-
+ 
         $this->di['validator']->isPasswordStrong($data['password']);
-
+ 
         $client = $this->di['db']->getExistingModelById('Client', $data['id'], 'Client not found');
-
+ 
         $this->di['events_manager']->fire(['event' => 'onBeforeAdminClientPasswordChange', 'params' => $data]);
-
+ 
         $client->pass = $this->di['password']->hashIt($data['password']);
         $client->updated_at = date('Y-m-d H:i:s');
         $this->di['db']->store($client);
-
+ 
         $profileService = $this->di['mod_service']('profile');
         $profileService->invalidateSessions('client', $data['id']);
-
+ 
         $this->di['events_manager']->fire(['event' => 'onAfterAdminClientPasswordChange', 'params' => ['id' => $client->id, 'password' => $data['password']]]);
-
+ 
         $this->di['logger']->info('Changed client #%s password', $client->id);
-
+ 
         return true;
     }
-
+ 
     /**
      * Returns list of client payments.
      *
@@ -394,7 +472,7 @@ class Admin extends \Api_Abstract
         [$q, $params] = $service->getSearchQuery($data);
         $per_page = $data['per_page'] ?? $this->di['pager']->getPer_page();
         $pager = $this->di['pager']->getSimpleResultSet($q, $params, $per_page);
-
+ 
         foreach ($pager['list'] as $key => $item) {
             $pager['list'][$key] = [
                 'id' => $item['id'],
@@ -404,10 +482,10 @@ class Admin extends \Api_Abstract
                 'created_at' => $item['created_at'],
             ];
         }
-
+ 
         return $pager;
     }
-
+ 
     /**
      * Remove row from clients balance.
      *
@@ -419,20 +497,20 @@ class Admin extends \Api_Abstract
             'id' => 'Client ID is required',
         ];
         $this->di['validator']->checkRequiredParamsForArray($required, $data);
-
+ 
         $model = $this->di['db']->getExistingModelById('ClientBalance', $data['id'], 'Balance line not found');
-
+ 
         $id = $model->id;
         $client_id = $model->client_id;
         $amount = $model->amount;
-
+ 
         $this->di['db']->trash($model);
-
+ 
         $this->di['logger']->info('Removed line %s from client #%s balance for %s', $id, $client_id, $amount);
-
+ 
         return true;
     }
-
+ 
     /**
      * Adds funds to clients balance.
      *
@@ -449,15 +527,15 @@ class Admin extends \Api_Abstract
             'description' => 'Description is required',
         ];
         $this->di['validator']->checkRequiredParamsForArray($required, $data);
-
+ 
         $client = $this->di['db']->getExistingModelById('Client', $data['id'], 'Client not found');
-
+ 
         $service = $this->di['mod_service']('client');
         $service->addFunds($client, $data['amount'], $data['description'], $data);
-
+ 
         return true;
     }
-
+ 
     /**
      * Remove password reminders which were not confirmed in 2 hours.
      *
@@ -470,12 +548,12 @@ class Admin extends \Api_Abstract
         foreach ($expired as $model) {
             $this->di['db']->trash($model);
         }
-
+ 
         $this->di['logger']->info('Executed action to delete expired clients password reminders');
-
+ 
         return true;
     }
-
+ 
     /**
      * Get list of clients logins history.
      *
@@ -488,7 +566,7 @@ class Admin extends \Api_Abstract
         [$q, $params] = $this->getService()->getHistorySearchQuery($data);
         $per_page = $data['per_page'] ?? $this->di['pager']->getPer_page();
         $pager = $this->di['pager']->getSimpleResultSet($q, $params, $per_page);
-
+ 
         foreach ($pager['list'] as $key => $item) {
             $pager['list'][$key] = [
                 'id' => $item['id'],
@@ -502,10 +580,10 @@ class Admin extends \Api_Abstract
                 ],
             ];
         }
-
+ 
         return $pager;
     }
-
+ 
     /**
      * Remove log entry form clients logins history.
      *
@@ -518,15 +596,15 @@ class Admin extends \Api_Abstract
         ];
         $this->di['validator']->checkRequiredParamsForArray($required, $data);
         $model = $this->di['db']->getExistingModelById('ActivityClientHistory', $data['id']);
-
+ 
         if (!$model instanceof \Model_ActivityClientHistory) {
             throw new \FOSSBilling\Exception('Event not found');
         }
         $this->di['db']->trash($model);
-
+ 
         return true;
     }
-
+ 
     /**
      * Return client statuses with counter.
      *
@@ -535,10 +613,10 @@ class Admin extends \Api_Abstract
     public function get_statuses($data)
     {
         $service = $this->di['mod_service']('client');
-
+ 
         return $service->counter();
     }
-
+ 
     /**
      * Return client groups. Id and title pairs.
      *
@@ -547,10 +625,10 @@ class Admin extends \Api_Abstract
     public function group_get_pairs($data)
     {
         $service = $this->di['mod_service']('client');
-
+ 
         return $service->getGroupPairs();
     }
-
+ 
     /**
      * Create new clients group.
      *
@@ -562,10 +640,10 @@ class Admin extends \Api_Abstract
             'title' => 'Group title is missing',
         ];
         $this->di['validator']->checkRequiredParamsForArray($required, $data);
-
+ 
         return $this->getService()->createGroup($data);
     }
-
+ 
     /**
      * Update client group.
      *
@@ -577,16 +655,16 @@ class Admin extends \Api_Abstract
             'id' => 'Group id is missing',
         ];
         $this->di['validator']->checkRequiredParamsForArray($required, $data);
-
+ 
         $model = $this->di['db']->getExistingModelById('ClientGroup', $data['id'], 'Group not found');
-
+ 
         $model->title = $data['title'] ?? $model->title;
         $model->updated_at = date('Y-m-d H:i:s');
         $this->di['db']->store($model);
-
+ 
         return true;
     }
-
+ 
     /**
      * Delete client group.
      *
@@ -598,18 +676,18 @@ class Admin extends \Api_Abstract
             'id' => 'Group id is missing',
         ];
         $this->di['validator']->checkRequiredParamsForArray($required, $data);
-
+ 
         $model = $this->di['db']->getExistingModelById('ClientGroup', $data['id'], 'Group not found');
-
+ 
         $clients = $this->di['db']->find('Client', 'client_group_id = :group_id', [':group_id' => $data['id']]);
-
+ 
         if ((is_countable($clients) ? count($clients) : 0) > 0) {
             throw new \FOSSBilling\InformationException('Group has clients assigned. Please reassign them first.');
         }
-
+ 
         return $this->getService()->deleteGroup($model);
     }
-
+ 
     /**
      * Get client group details.
      *
@@ -621,12 +699,12 @@ class Admin extends \Api_Abstract
             'id' => 'Group id is missing',
         ];
         $this->di['validator']->checkRequiredParamsForArray($required, $data);
-
+ 
         $model = $this->di['db']->getExistingModelById('ClientGroup', $data['id'], 'Group not found');
-
+ 
         return $this->di['db']->toArray($model);
     }
-
+ 
     /**
      * Deletes clients with given IDs.
      *
@@ -638,14 +716,14 @@ class Admin extends \Api_Abstract
             'ids' => 'IDs not passed',
         ];
         $this->di['validator']->checkRequiredParamsForArray($required, $data);
-
+ 
         foreach ($data['ids'] as $id) {
             $this->delete(['id' => $id]);
         }
-
+ 
         return true;
     }
-
+ 
     /**
      * Deletes client login logs with given IDs.
      *
@@ -657,18 +735,18 @@ class Admin extends \Api_Abstract
             'ids' => 'IDs not passed',
         ];
         $this->di['validator']->checkRequiredParamsForArray($required, $data);
-
+ 
         foreach ($data['ids'] as $id) {
             $this->login_history_delete(['id' => $id]);
         }
-
+ 
         return true;
     }
-
+ 
     public function export_csv($data)
     {
         $data['headers'] ??= [];
-
+ 
         return $this->getService()->exportCSV($data['headers']);
     }
 }
