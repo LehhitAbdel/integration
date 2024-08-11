@@ -2,7 +2,7 @@
 
 services:
   wordpress:
-    image: wordpress:latest
+    build: ./wordpress
     container_name: wordpress
     restart: always
     ports:

@@ -13,12 +13,11 @@ RUN apt-get update && apt-get install -y \
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
 
-COPY ./Client-api /var/www/html/wp-content/plugins/client-rest-api
-
+COPY ./wp-content/plugins/clientapi/ /var/www/html/wp-content/plugins/clientapi
 
 # Install Composer dependencies for the plugin
-RUN composer require php-amqplib/php-amqplib # from EersteZit
-RUN composer install --working-dir=/var/www/html/wp-content/plugins/client-rest-api/
+RUN composer require php-amqplib/php-amqplib 
+RUN composer install --working-dir=/var/www/html/wp-content/plugins/clientapi
 
 # Ensure correct permissions
 RUN chown -R www-data:www-data /var/www/html
