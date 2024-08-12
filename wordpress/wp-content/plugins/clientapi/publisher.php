@@ -21,6 +21,7 @@ register_activation_hook(__FILE__, 'create_users_table');
 function user_overview_menu() {
     add_menu_page('User Overview', 'User Overview', 'manage_options', 'user-overview', 'user_overview_page');
     add_submenu_page('user-overview', 'Add User', 'Add User', 'manage_options', 'add-user', 'user_add_page');
+    add_submenu_page('user-overview', 'Edit User', 'Edit User', 'manage_options', 'edit-user', 'user_edit_page');
 }
 
 function user_overview_page() {
@@ -256,6 +257,106 @@ function user_delete_handler() {
             exit;
         }
     }
+}
+
+function user_edit_page() {
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'users_custom';
+    $user_id = intval($_GET['id']);
+    $user = $wpdb->get_row("SELECT * FROM $table_name WHERE id = $user_id");
+    
+    if (isset($_POST['submit_user_form'])) {
+        $name = sanitize_text_field($_POST['name']);
+        $email = sanitize_email($_POST['email']);
+        $wpdb->update($table_name, [
+            'name' => $name,
+            'email' => $email
+        ], ['id' => $user_id]);
+        
+        // Send updated data to RabbitMQ
+        $rabbit_sender = new RabbitMQPublisher();
+        $rabbit_sender->publish(json_encode(['action' => 'update', 'id' => $user_id, 'name' => $name, 'email' => $email]));
+        echo '<div class="notice notice-success is-dismissible"><p>User updated and sent to RabbitMQ!</p></div>';
+    }
+    ?>
+    <div class="wrap user-edit">
+        <h1 class="user-title">Edit User</h1>
+        <form method="post" action="" class="user-form">
+            <div class="user-form-row">
+                <div class="user-form-group">
+                    <label for="name" class="user-label">Name</label>
+                    <input type="text" name="name" id="name" required class="user-input" value="<?php echo esc_html($user->name); ?>" />
+                </div>
+                <div class="user-form-group">
+                    <label for="email" class="user-label">Email</label>
+                    <input type="email" name="email" id="email" required class="user-input" value="<?php echo esc_html($user->email); ?>" />
+                </div>
+            </div>
+            <div class="user-form-actions">
+                <input type="submit" name="submit_user_form" class="user-btn user-btn-primary" value="Update User" />
+            </div>
+        </form>
+    </div>
+
+    <style>
+        .user-edit {
+            max-width: 90%;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            font-family: 'Arial', sans-serif;
+        }
+        .user-title {
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .user-form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .user-form-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+        }
+        .user-form-group {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .user-label {
+            font-size: 14px;
+            margin-bottom: 8px;
+            color: #555;
+        }
+        .user-input {
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #fff;
+        }
+        .user-form-actions {
+            text-align: right;
+        }
+        .user-btn {
+            padding: 10px 20px;
+            font-size: 16px;
+            color: #fff;
+            border-radius: 5px;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .user-btn-primary {
+            background-color: #007bff;
+        }
+    </style>
+    <?php
 }
 
 
