@@ -14,6 +14,8 @@ use PhpAmqpLib\Message\AMQPMessage;
 
 // WordPress Hooks and Actions
 add_action('admin_menu', 'user_overview_menu');
+add_action('admin_init', 'user_delete_handler');
+add_action('delete_user', 'send_deleted_user_to_rabbitmq');
 register_activation_hook(__FILE__, 'create_users_table');
 
 function user_overview_menu() {
@@ -234,6 +236,26 @@ function user_add_page() {
         }
     </style>
     <?php
+}
+
+function user_delete_handler() {
+    if (isset($_GET['action']) && $_GET['action'] === 'delete_user' && isset($_GET['id'])) {
+        global $wpdb;
+        $table_name = $wpdb->prefix . 'users_custom';
+        $user_id = intval($_GET['id']);
+        $user = $wpdb->get_row("SELECT * FROM $table_name WHERE id = $user_id");
+        
+        if ($user) {
+            $wpdb->delete($table_name, ['id' => $user_id]);
+            
+            // Send deleted data to RabbitMQ
+            $rabbit_sender = new RabbitMQPublisher();
+            $rabbit_sender->publish(json_encode(['action' => 'delete', 'id' => $user_id, 'name' => $user->name, 'email' => $user->email]));
+            
+            wp_redirect(admin_url('admin.php?page=user-overview'));
+            exit;
+        }
+    }
 }
 
 
