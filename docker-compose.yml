@@ -64,6 +64,12 @@ services:
     volumes:
       - foss_db_data:/var/lib/mysql
 
+  consumer:
+    build: ./my-consumer
+    restart: always
+    depends_on:
+      - rabbitmq
+
 volumes:
   wordpress_data:
   db_data:

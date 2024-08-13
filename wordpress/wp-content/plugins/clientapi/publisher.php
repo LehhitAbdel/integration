@@ -379,7 +379,6 @@ function create_users_table() {
     dbDelta($sql);
 }
 
-// RabbitMQ Publisher Class
 class RabbitMQPublisher {
     private $connection;
     private $channel;
@@ -387,7 +386,8 @@ class RabbitMQPublisher {
     public function __construct() {
         $this->connection = new AMQPStreamConnection('rabbitmq', 5672, 'user', 'password');
         $this->channel = $this->connection->channel();
-        $this->channel->queue_declare('wp_user_queue', false, false, false, false);
+        // Set durable to true to match the existing queue configuration
+        $this->channel->queue_declare('wp_user_queue', false, true, false, false);
     }
 
     public function publish($message) {
@@ -400,4 +400,5 @@ class RabbitMQPublisher {
         $this->connection->close();
     }
 }
+
 ?>
