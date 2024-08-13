@@ -251,7 +251,7 @@ function user_delete_handler() {
             
             // Send deleted data to RabbitMQ
             $rabbit_sender = new RabbitMQPublisher();
-            $rabbit_sender->publish(json_encode(['action' => 'delete', 'id' => $user_id, 'name' => $user->name, 'email' => $user->email]));
+            $rabbit_sender->publish(json_encode(['action' => 'delete', 'id' => $user_id]));
             
             wp_redirect(admin_url('admin.php?page=user-overview'));
             exit;
