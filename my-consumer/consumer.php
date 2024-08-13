@@ -54,7 +54,7 @@ while (true) {
         curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
 
         // Set basic authentication
-        curl_setopt($ch, CURLOPT_USERPWD, "admin:8ErJ2uR0PY3Quxdc1R1c1TDq5JZXWQRn");
+        curl_setopt($ch, CURLOPT_USERPWD, "admin:lCPCpgM23wnJ4efn85tNJoUSKOK7tgMd");
 
         // Execute the request
         $response = curl_exec($ch);
@@ -81,8 +81,11 @@ while (true) {
                 create_user_foss($data);
                 break;
             case 'delete':
-                    delete_user_foss($data);
-                    break;
+                delete_user_foss($data);
+                break;
+            case 'update':
+                update_user_foss($data);
+                break;
             default:
                 // Handle other actions or default case
                 break;
@@ -115,7 +118,7 @@ while (true) {
         curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
 
         // Set basic authentication
-        curl_setopt($ch, CURLOPT_USERPWD, "admin:8ErJ2uR0PY3Quxdc1R1c1TDq5JZXWQRn");
+        curl_setopt($ch, CURLOPT_USERPWD, "admin:lCPCpgM23wnJ4efn85tNJoUSKOK7tgMd");
 
         // Execute the request
         $response = curl_exec($ch);
@@ -132,6 +135,51 @@ while (true) {
         curl_close($ch);
     }
 
+    function update_user_foss($data){
+        // API endpoint for deleting a user
+        $url = "http://192.168.129.30:8090/api/admin/client/update";
+
+        // Data to be sent in the request (assuming user deletion is based on id)
+        $data = array(
+            "id" => $data['id'],
+            "email" => $data['email'],
+            "first_name" => $data['name'],
+        );
+
+        // Convert the data array to JSON
+        $jsonData = json_encode($data);
+
+        // Initialize cURL
+        $ch = curl_init($url);
+
+        // Set the cURL options
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+            'Content-Type: application/json'
+        ));
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
+
+        // Set basic authentication
+        curl_setopt($ch, CURLOPT_USERPWD, "admin:lCPCpgM23wnJ4efn85tNJoUSKOK7tgMd");
+
+        // Execute the request
+        $response = curl_exec($ch);
+
+        // Check for errors
+        if (curl_errno($ch)) {
+            echo 'Error:' . curl_error($ch);
+        } else {
+            // Output the response
+            echo 'Response:' . $response;
+        }
+
+        // Close the cURL session
+        curl_close($ch);
+
+    }
+
+
     // Consume messages from the queue
     $channel->basic_consume('wp_user_queue', '', false, true, false, false, $callback);
 
@@ -142,4 +190,6 @@ while (true) {
 
     $channel->close();
     $connection->close();
+
+
 }
