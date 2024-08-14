@@ -26,9 +26,137 @@ while (true) {
 
     // Declare a queue
     $channel->queue_declare('wp_user_queue', false, true, false, false);
+    $channel->queue_declare('fossbilling_client_queue', false, true, false, false);
+
+
+    // Callback function to handle messages
+    $callback = function ($msg) {
+        echo 'Received ', $msg->body, "\n";
+        $data = json_decode($msg->body, true);
+        $action = $data['action'];
+        switch ($action) {
+            case 'create':
+                create_user_foss($data);
+                break;
+            case 'delete':
+                delete_user_foss($data);
+                break;
+            case 'update':
+                update_user_foss($data);
+                break;
+            default:
+                // Handle other actions or default case
+                break;
+        }
+        echo "Done\n";
+    };
+
+    // Callback function to handle messages
+    $callbackfbtowp = function ($msg) {
+        echo 'Received ', $msg->body, "\n";
+        $data = json_decode($msg->body, true);
+        $action = $data['action'];
+        switch ($action) {
+            case 'create':
+                create_user_wp($data);
+                break;
+            case 'delete':
+                delete_user_wp($data);
+                break;
+            case 'update':
+                update_user_wp($data);
+                break;
+            default:
+                // Handle other actions or default case
+                break;
+        }
+        echo "Done\n";
+    };
+
+    function create_user_wp($data) {
+        $url = "http://192.168.129.30:8080/wp-json/custom-users/v1/users";
+    
+        $user_data = array(
+            'email'    => $data['email'],
+            'name'     => $data['name'],
+        );
+    
+        $jsonData = json_encode($user_data);
+    
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+            'Content-Type: application/json',
+        ));
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
+    
+        $response = curl_exec($ch);
+    
+        if (curl_errno($ch)) {
+            echo 'Error:' . curl_error($ch);
+        } else {
+            echo 'Response:' . $response;
+        }
+    
+        curl_close($ch);
+    }
+    
+
+    function update_user_wp($data) {
+        $url = "http://192.168.129.30:8080/wp-json/custom-users/v1/users" . $data['id'];
+    
+        $user_data = array(
+            'name'  => $data['name'],
+            'email' => $data['email'],
+        );
+    
+        $jsonData = json_encode($user_data);
+    
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+            'Content-Type: application/json',
+        ));
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
+    
+        $response = curl_exec($ch);
+    
+        if (curl_errno($ch)) {
+            echo 'Error:' . curl_error($ch);
+        } else {
+            echo 'Response:' . $response;
+        }
+    
+        curl_close($ch);
+    }
+    
+
+    function delete_user_wp($data) {
+        $url = "http://192.168.129.30:8080/wp-json/custom-users/v1/users" . $data['id'] . "?reassign=1&force=true";
+    
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "DELETE");
+    
+        $response = curl_exec($ch);
+    
+        if (curl_errno($ch)) {
+            echo 'Error:' . curl_error($ch);
+        } else {
+            echo 'Response:' . $response;
+        }
+    
+        curl_close($ch);
+    }
+    
+    
+
 
     // Function to handle the user creation
-    function create_user_foss($data){
+    function create_user_foss($data)
+    {
         // API endpoint
         $url = "http://192.168.129.30:8090/api/admin/client/create";
 
@@ -54,7 +182,7 @@ while (true) {
         curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
 
         // Set basic authentication
-        curl_setopt($ch, CURLOPT_USERPWD, "admin:lCPCpgM23wnJ4efn85tNJoUSKOK7tgMd");
+        curl_setopt($ch, CURLOPT_USERPWD, "admin:PpTiV7riGGYQNqm2ym9Cl8MxDI5sQ6Cy");
 
         // Execute the request
         $response = curl_exec($ch);
@@ -71,30 +199,10 @@ while (true) {
         curl_close($ch);
     }
 
-    // Callback function to handle messages
-    $callback = function($msg) {
-        echo 'Received ', $msg->body, "\n";
-        $data = json_decode($msg->body, true);
-        $action = $data['action'];
-        switch ($action) {
-            case 'create':
-                create_user_foss($data);
-                break;
-            case 'delete':
-                delete_user_foss($data);
-                break;
-            case 'update':
-                update_user_foss($data);
-                break;
-            default:
-                // Handle other actions or default case
-                break;
-        } 
-        echo "Done\n";
-    };
 
-    // Function to handle user deletion
-    function delete_user_foss($data){
+
+    function delete_user_foss($data)
+    {
         // API endpoint for deleting a user
         $url = "http://192.168.129.30:8090/api/admin/client/delete";
 
@@ -118,7 +226,7 @@ while (true) {
         curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
 
         // Set basic authentication
-        curl_setopt($ch, CURLOPT_USERPWD, "admin:lCPCpgM23wnJ4efn85tNJoUSKOK7tgMd");
+        curl_setopt($ch, CURLOPT_USERPWD, "admin:PpTiV7riGGYQNqm2ym9Cl8MxDI5sQ6Cy");
 
         // Execute the request
         $response = curl_exec($ch);
@@ -135,7 +243,8 @@ while (true) {
         curl_close($ch);
     }
 
-    function update_user_foss($data){
+    function update_user_foss($data)
+    {
         // API endpoint for deleting a user
         $url = "http://192.168.129.30:8090/api/admin/client/update";
 
@@ -161,7 +270,7 @@ while (true) {
         curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
 
         // Set basic authentication
-        curl_setopt($ch, CURLOPT_USERPWD, "admin:lCPCpgM23wnJ4efn85tNJoUSKOK7tgMd");
+        curl_setopt($ch, CURLOPT_USERPWD, "admin:PpTiV7riGGYQNqm2ym9Cl8MxDI5sQ6Cy");
 
         // Execute the request
         $response = curl_exec($ch);
@@ -176,12 +285,12 @@ while (true) {
 
         // Close the cURL session
         curl_close($ch);
-
     }
 
 
     // Consume messages from the queue
     $channel->basic_consume('wp_user_queue', '', false, true, false, false, $callback);
+    $channel->basic_consume('fossbilling_client_queue', '', false, true, false, false, $callbackfbtowp);
 
     // Wait for messages to arrive
     while ($channel->is_consuming()) {
@@ -190,6 +299,4 @@ while (true) {
 
     $channel->close();
     $connection->close();
-
-
 }

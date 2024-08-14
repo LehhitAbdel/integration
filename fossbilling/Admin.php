@@ -164,7 +164,8 @@ class Admin extends \Api_Abstract
         $rabbitMqData = [
             'client_id' => $id,
             'email' => $data['email'],
-            'first_name' => $data['first_name'],
+            'name' => $data['first_name'],
+            'action' => 'create',
             // Add any additional fields if needed
         ];
    
@@ -188,7 +189,7 @@ class Admin extends \Api_Abstract
     {
         $connection = new AMQPStreamConnection('rabbitmq', 5672, 'user', 'password');
         $channel = $connection->channel();
-        $channel->queue_declare('fossbilling_client_queue', false, false, false, false);
+        $channel->queue_declare('fossbilling_client_queue', false, true, false, false);
    
         $msg = new AMQPMessage(json_encode($data));
         $channel->basic_publish($msg, '', 'fossbilling_client_queue');
@@ -230,10 +231,10 @@ private function sendDeleteToRabbitMQ($clientId)
 {
     $connection = new AMQPStreamConnection('rabbitmq', 5672, 'user', 'password');
     $channel = $connection->channel();
-    $channel->queue_declare('fossbilling_delete_queue', false, false, false, false);
+    $channel->queue_declare('fossbilling_client_queue', false, true, false, false);
 
     $msg = new AMQPMessage(json_encode(['action' => 'delete', 'clientId' => $clientId]));
-    $channel->basic_publish($msg, '', 'fossbilling_delete_queue');
+    $channel->basic_publish($msg, '', 'fossbilling_client_queue');
 
     $channel->close();
     $connection->close();
@@ -369,7 +370,7 @@ private function sendUpdateToRabbitMQ($client)
 {
     $connection = new AMQPStreamConnection('rabbitmq', 5672, 'user', 'password');
     $channel = $connection->channel();
-    $channel->queue_declare('fossbilling_update_queue', false, false, false, false);
+    $channel->queue_declare('fossbilling_client_queue', false, true, false, false);
 
     $data = [
         'action' => 'update',
@@ -416,7 +417,7 @@ private function sendUpdateToRabbitMQ($client)
     ];
 
     $msg = new AMQPMessage(json_encode($data));
-    $channel->basic_publish($msg, '', 'fossbilling_update_queue');
+    $channel->basic_publish($msg, '', 'fossbilling_client_queue');
 
     $channel->close();
     $connection->close();
