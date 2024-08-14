@@ -104,11 +104,12 @@ while (true) {
     
 
     function update_user_wp($data) {
-        $url = "http://192.168.129.30:8080/wp-json/custom-users/v1/users" . $data['id'];
+        $user_id = $data['clientId']; // Ensure you pass the user's ID in the $data array
+        $url = "http://192.168.129.30:8080/wp-json/custom-users/v1/users/{$user_id}";
     
         $user_data = array(
-            'name'  => $data['name'],
-            'email' => $data['email'],
+            'email'    => $data['clientData']['email'],
+            'name'     => $data['clientData']['first_name'],
         );
     
         $jsonData = json_encode($user_data);
@@ -118,7 +119,7 @@ while (true) {
         curl_setopt($ch, CURLOPT_HTTPHEADER, array(
             'Content-Type: application/json',
         ));
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
         curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
     
         $response = curl_exec($ch);
@@ -131,6 +132,7 @@ while (true) {
     
         curl_close($ch);
     }
+    
     
 
     function delete_user_wp($data) {
@@ -182,7 +184,7 @@ while (true) {
         curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
 
         // Set basic authentication
-        curl_setopt($ch, CURLOPT_USERPWD, "admin:PpTiV7riGGYQNqm2ym9Cl8MxDI5sQ6Cy");
+        curl_setopt($ch, CURLOPT_USERPWD, "admin:4urnukG3TOJgKm2nVYwNDhQuQxibcSMA");
 
         // Execute the request
         $response = curl_exec($ch);
@@ -226,7 +228,7 @@ while (true) {
         curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
 
         // Set basic authentication
-        curl_setopt($ch, CURLOPT_USERPWD, "admin:PpTiV7riGGYQNqm2ym9Cl8MxDI5sQ6Cy");
+        curl_setopt($ch, CURLOPT_USERPWD, "admin:4urnukG3TOJgKm2nVYwNDhQuQxibcSMA");
 
         // Execute the request
         $response = curl_exec($ch);
@@ -270,7 +272,7 @@ while (true) {
         curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonData);
 
         // Set basic authentication
-        curl_setopt($ch, CURLOPT_USERPWD, "admin:PpTiV7riGGYQNqm2ym9Cl8MxDI5sQ6Cy");
+        curl_setopt($ch, CURLOPT_USERPWD, "admin:4urnukG3TOJgKm2nVYwNDhQuQxibcSMA");
 
         // Execute the request
         $response = curl_exec($ch);

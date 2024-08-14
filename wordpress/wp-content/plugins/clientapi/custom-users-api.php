@@ -33,6 +33,12 @@ function register_custom_users_routes() {
         'methods' => 'DELETE',
         'callback' => 'delete_custom_user',
     ));
+
+    register_rest_route('custom-users/v1', '/users/(?P<id>\d+)', array(
+        'methods' => 'PUT',
+        'callback' => 'update_custom_user',
+    ));
+    
 }
 
 // Get all users
@@ -102,3 +108,38 @@ function delete_custom_user($request) {
         return new WP_Error('delete_failed', 'Failed to delete user', array('status' => 500));
     }
 }
+
+// Update a user by ID
+function update_custom_user($request) {
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'users_custom';
+    $id = $request['id'];
+
+    // Check if the user exists
+    $user = $wpdb->get_row($wpdb->prepare("SELECT * FROM $table_name WHERE id = %d", $id));
+
+    if (empty($user)) {
+        return new WP_Error('no_user', 'User not found', array('status' => 404));
+    }
+
+    // Sanitize and prepare the data for updating
+    $name = !empty($request['name']) ? sanitize_text_field($request['name']) : $user->name;
+    $email = !empty($request['email']) ? sanitize_email($request['email']) : $user->email;
+
+    // Update the user in the database
+    $updated = $wpdb->update(
+        $table_name,
+        array(
+            'name' => $name,
+            'email' => $email,
+        ),
+        array('id' => $id)
+    );
+
+    if ($updated !== false) {
+        return rest_ensure_response(array('updated' => true, 'id' => $id));
+    } else {
+        return new WP_Error('update_failed', 'Failed to update user', array('status' => 500));
+    }
+}
+
