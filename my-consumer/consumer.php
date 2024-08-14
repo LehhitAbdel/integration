@@ -136,7 +136,7 @@ while (true) {
     
 
     function delete_user_wp($data) {
-        $url = "http://192.168.129.30:8080/wp-json/custom-users/v1/users" . $data['id'] . "?reassign=1&force=true";
+        $url = "http://192.168.129.30:8080/wp-json/custom-users/v1/users/" . $data['clientId'];
     
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
